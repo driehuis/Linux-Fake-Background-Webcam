@@ -14,6 +14,12 @@ import fnmatch
 import time
 import mediapipe as mp
 
+global cached_mask
+global cached_time
+cached_mask = None
+cached_time = 0
+
+
 def findFile(pattern, path):
     for root, _, files in os.walk(path):
         for name in files:
@@ -238,7 +244,15 @@ then scale & crop the image so that its pixels retain their aspect ratio."""
     def compose_frame(self, frame):
         frame.flags.writeable = False
 
-        mask =  self.classifier.process(frame).segmentation_mask
+        global cached_mask
+        global cached_time
+        if cached_mask is None or cached_time > 4:
+            mask =  self.classifier.process(frame).segmentation_mask
+            cached_time = 0
+            cached_mask = mask
+        else:
+            mask = cached_mask
+            cached_time += 1
 
         # Get background image
         if self.no_background is False:
@@ -274,7 +288,9 @@ then scale & crop the image so that its pixels retain their aspect ratio."""
         t0 = time.monotonic()
         print_fps_period = 1
         frame_count = 0
+        target_fps = 30
         while True:
+            t1 = time.monotonic()
             frame = self.real_cam.read()
             if frame is None:
                 time.sleep(0.1)
@@ -288,6 +304,9 @@ then scale & crop the image so that its pixels retain their aspect ratio."""
                 print("FPS: {:6.2f}".format(self.current_fps), end="\r")
                 frame_count = 0
                 t0 = time.monotonic()
+            td = time.monotonic() - t1
+            if td < 1.0 / target_fps:
+                time.sleep((1.0 / target_fps) - td)
 
 
 def parse_args():
